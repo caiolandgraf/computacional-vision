@@ -1,0 +1,271 @@
+{
+  "_comment": "Arquivo de configuração exemplo para o Sistema de Detecção de Mato Alto",
+  "_version": "2.0",
+  "_description": "Copie este arquivo para 'config.json' e ajuste conforme necessário",
+
+  "detection": {
+    "_description": "Configurações gerais do sistema de detecção",
+    "min_confidence": 0.6,
+    "consensus_threshold": 0.7,
+    "adaptive_threshold": true,
+    "default_method": "combined",
+    "enable_gpu": false,
+    "max_image_size": [1920, 1080],
+    "preprocessing": {
+      "resize_before_processing": true,
+      "denoise": false,
+      "enhance_contrast": true,
+      "clahe_clip_limit": 2.0
+    }
+  },
+
+  "color_analysis": {
+    "_description": "Configurações para análise baseada em cor",
+    "brightness_threshold": 0.3,
+    "contrast_threshold": 0.4,
+    "adaptive_ranges": true,
+    "hsv_ranges": {
+      "green_typical": {
+        "lower": [40, 50, 50],
+        "upper": [80, 255, 255]
+      },
+      "green_dark": {
+        "lower": [35, 40, 20],
+        "upper": [85, 255, 200]
+      },
+      "green_yellowish": {
+        "lower": [25, 30, 40],
+        "upper": [45, 255, 255]
+      },
+      "brown_dry": {
+        "lower": [10, 30, 20],
+        "upper": [30, 200, 150]
+      }
+    },
+    "morphology": {
+      "enable": true,
+      "kernel_size": 5,
+      "operations": ["opening", "closing"],
+      "iterations": 2
+    },
+    "edge_detection": {
+      "enable": true,
+      "method": "canny",
+      "low_threshold": 50,
+      "high_threshold": 150
+    }
+  },
+
+  "texture_analysis": {
+    "_description": "Configurações para análise de textura",
+    "gabor_filters": {
+      "enable": true,
+      "angles": [0, 45, 90, 135],
+      "frequencies": [0.1, 0.3, 0.5],
+      "kernel_size": 31,
+      "sigma_x": 5,
+      "sigma_y": 5
+    },
+    "lbp": {
+      "enable": true,
+      "radius": 3,
+      "n_points": 8,
+      "method": "uniform"
+    },
+    "glcm": {
+      "enable": false,
+      "distances": [1, 2],
+      "angles": [0, 45, 90, 135],
+      "properties": ["contrast", "dissimilarity", "homogeneity", "energy"]
+    },
+    "wavelet": {
+      "enable": false,
+      "wavelet_type": "db4",
+      "levels": 3
+    }
+  },
+
+  "combined_method": {
+    "_description": "Configurações para método combinado",
+    "weights": {
+      "color": 0.6,
+      "texture": 0.4,
+      "edge": 0.3
+    },
+    "fusion_method": "weighted_average",
+    "post_processing": {
+      "remove_small_objects": true,
+      "min_object_size": 100,
+      "fill_holes": true,
+      "smooth_boundaries": true
+    }
+  },
+
+  "deep_learning": {
+    "_description": "Configurações para método de deep learning",
+    "model_path": "models/grass_detector.h5",
+    "use_pretrained": true,
+    "input_size": [256, 256],
+    "batch_size": 1,
+    "confidence_threshold": 0.5,
+    "nms_threshold": 0.4,
+    "augmentation": {
+      "enable": false,
+      "rotation": 15,
+      "brightness": 0.2,
+      "contrast": 0.2
+    }
+  },
+
+  "adaptive_learning": {
+    "_description": "Sistema de aprendizado adaptativo",
+    "enable": true,
+    "learning_rate": 0.01,
+    "feedback_weight": 0.3,
+    "history_size": 100,
+    "auto_calibration": true,
+    "save_learning_data": true
+  },
+
+  "visualization": {
+    "_description": "Configurações de visualização e saída",
+    "overlay_opacity": 0.7,
+    "highlight_color": [0, 255, 0],
+    "border_thickness": 2,
+    "show_confidence": true,
+    "show_grid": false,
+    "colormap": "viridis",
+    "heatmap": {
+      "enable": true,
+      "blur_kernel": 15,
+      "threshold": 0.3
+    },
+    "dashboard": {
+      "show_statistics": true,
+      "show_histogram": true,
+      "show_comparison": true,
+      "font_size": 12
+    }
+  },
+
+  "output": {
+    "_description": "Configurações de arquivos de saída",
+    "base_directory": "output",
+    "create_subdirs": true,
+    "save_original": true,
+    "save_mask": true,
+    "save_overlay": true,
+    "save_stats": true,
+    "image_format": "jpg",
+    "image_quality": 95,
+    "filename_template": "{timestamp}_{method}_{original_name}",
+    "compression": {
+      "enable": true,
+      "level": 6
+    }
+  },
+
+  "performance": {
+    "_description": "Configurações de performance",
+    "num_threads": "auto",
+    "memory_limit": "auto",
+    "cache_size": 100,
+    "parallel_processing": {
+      "enable": true,
+      "batch_size": 4,
+      "max_workers": "auto"
+    },
+    "profiling": {
+      "enable": false,
+      "save_profile": false
+    }
+  },
+
+  "logging": {
+    "_description": "Configurações de logging",
+    "level": "INFO",
+    "file": "logs/grass_detector.log",
+    "max_size": "10MB",
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "console_output": true
+  },
+
+  "validation": {
+    "_description": "Configurações de validação e qualidade",
+    "scenario_detection": {
+      "enable": true,
+      "thresholds": {
+        "low_light": 0.3,
+        "overexposed": 0.8,
+        "low_contrast": 0.4,
+        "method_disagreement": 0.3,
+        "sparse_detection": 0.05,
+        "dense_detection": 0.8,
+        "poor_focus": 0.1
+      }
+    },
+    "outlier_removal": {
+      "enable": true,
+      "method": "isolation_forest",
+      "contamination": 0.1
+    },
+    "consensus_validation": {
+      "enable": true,
+      "min_agreement": 0.7,
+      "methods_to_compare": ["color", "texture"]
+    }
+  },
+
+  "experimental": {
+    "_description": "Funcionalidades experimentais (use com cuidado)",
+    "multi_scale_analysis": {
+      "enable": false,
+      "scales": [0.5, 1.0, 1.5]
+    },
+    "temporal_analysis": {
+      "enable": false,
+      "history_frames": 5,
+      "motion_threshold": 0.1
+    },
+    "semantic_segmentation": {
+      "enable": false,
+      "model": "deeplabv3",
+      "classes": ["grass", "trees", "ground", "buildings"]
+    },
+    "3d_reconstruction": {
+      "enable": false,
+      "stereo_matching": true,
+      "depth_estimation": false
+    }
+  },
+
+  "_usage_examples": {
+    "_description": "Exemplos de uso desta configuração",
+    "quick_analysis": "python3 src/main.py --config config.json --image foto.jpg",
+    "batch_processing": "python3 src/main.py --config config.json --batch pasta_imagens/",
+    "custom_method": "python3 src/main.py --config config.json --method color --image foto.jpg"
+  },
+
+  "_performance_presets": {
+    "_description": "Presets pré-definidos para diferentes cenários",
+    "fast": {
+      "detection.default_method": "color",
+      "detection.max_image_size": [640, 480],
+      "texture_analysis.gabor_filters.enable": false,
+      "texture_analysis.lbp.enable": false
+    },
+    "accurate": {
+      "detection.default_method": "combined",
+      "detection.max_image_size": [1920, 1080],
+      "texture_analysis.gabor_filters.enable": true,
+      "texture_analysis.lbp.enable": true
+    },
+    "balanced": {
+      "detection.default_method": "combined",
+      "detection.max_image_size": [1280, 720],
+      "texture_analysis.gabor_filters.enable": true,
+      "texture_analysis.lbp.enable": false
+    }
+  }
+}
