@@ -1,0 +1,4 @@
+output/
+test_output/
+training_data/videos/
+training_data/processed_frames/unknown/

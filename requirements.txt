@@ -1,0 +1,33 @@
+# Processamento de imagens e visão computacional
+opencv-python==4.8.1.78
+opencv-contrib-python==4.8.1.78
+
+# Machine Learning e Deep Learning
+tensorflow==2.13.0
+torch==2.0.1
+torchvision==0.15.2
+
+# Processamento numérico e científico
+numpy==1.24.3
+scipy==1.11.1
+
+# Manipulação de imagens
+Pillow==10.0.0
+scikit-image==0.21.0
+
+# Interface e utilitários
+matplotlib==3.7.2
+tqdm==4.65.0
+argparse
+
+# Download de modelos pré-treinados
+gdown==4.7.1
+requests==2.31.0
+
+# Processamento de vídeo
+imageio==2.31.1
+imageio-ffmpeg==0.4.8
+
+# Utilitários adicionais
+pathlib
+os-sys
