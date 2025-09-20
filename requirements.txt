@@ -6,6 +6,7 @@ opencv-contrib-python==4.8.1.78
 tensorflow==2.13.0
 torch==2.0.1
 torchvision==0.15.2
+scikit-learn==1.7.2
 
 # Processamento numérico e científico
 numpy==1.24.3
