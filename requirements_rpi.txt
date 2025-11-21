@@ -1,0 +1,96 @@
+# ============================================================================
+# SISTEMA DE DETECÇÃO PARA RASPBERRY PI 4 - DEPENDÊNCIAS
+# ============================================================================
+# Versões otimizadas para ARM64/ARM7 (Raspberry Pi)
+# Testado em Raspberry Pi OS (Debian Bullseye/Bookworm)
+# Última atualização: 2025-01-26
+# ============================================================================
+
+# ATENÇÃO: Instale primeiro as dependências do sistema:
+# sudo apt-get update
+# sudo apt-get install -y python3-pip python3-opencv libopencv-dev
+# sudo apt-get install -y libatlas-base-dev libjasper-dev libqtgui4 libqt4-test
+# sudo apt-get install -y gpsd gpsd-clients python3-gps
+
+# ============================================================================
+# PROCESSAMENTO DE IMAGENS E VISÃO COMPUTACIONAL
+# ============================================================================
+# RECOMENDADO: Instalar OpenCV via apt para melhor performance em ARM
+# sudo apt-get install python3-opencv
+# Se preferir via pip (mais lento para compilar):
+opencv-python-headless>=4.6.0,<5.0.0
+
+# ============================================================================
+# MACHINE LEARNING (VERSÕES LEVES)
+# ============================================================================
+scikit-learn>=1.0.0,<1.4.0
+joblib>=1.2.0,<2.0.0
+
+# ============================================================================
+# PROCESSAMENTO NUMÉRICO (OTIMIZADO PARA ARM)
+# ============================================================================
+numpy>=1.21.0,<1.25.0
+scipy>=1.7.0,<1.12.0
+
+# ============================================================================
+# MANIPULAÇÃO DE IMAGENS
+# ============================================================================
+Pillow>=9.0.0,<11.0.0
+
+# ============================================================================
+# NETWORKING E API
+# ============================================================================
+requests>=2.25.0,<3.0.0
+urllib3>=1.26.0,<3.0.0
+
+# ============================================================================
+# GPS (ESCOLHA UM DOS BACKENDS)
+# ============================================================================
+# Opção 1: gpsd (RECOMENDADO para Raspberry Pi)
+# Instale via apt: sudo apt-get install python3-gps
+# Ou via pip:
+gps3>=0.33.3
+
+# Opção 2: pyserial (para GPS serial direto)
+pyserial>=3.5,<4.0
+
+# ============================================================================
+# UTILITÁRIOS
+# ============================================================================
+python-dotenv>=0.19.0,<2.0.0
+colorama>=0.4.4,<1.0.0
+
+# ============================================================================
+# NÃO INSTALE (PESADOS DEMAIS PARA RASPBERRY PI)
+# ============================================================================
+# tensorflow - Muito pesado, não recomendado
+# torch - Muito pesado, não recomendado
+# matplotlib - Use apenas se realmente necessário
+# seaborn - Use apenas se realmente necessário
+# pandas - Use apenas se realmente necessário
+
+# ============================================================================
+# INSTALAÇÃO RÁPIDA
+# ============================================================================
+# Método recomendado (usa pacotes pré-compilados do sistema):
+#   sudo apt-get install python3-opencv python3-numpy python3-scipy python3-gps
+#   pip3 install -r requirements_rpi.txt --no-deps
+#
+# Método completo (compila tudo, mais demorado):
+#   pip3 install -r requirements_rpi.txt
+#
+# ============================================================================
+# TROUBLESHOOTING
+# ============================================================================
+# Se tiver erro com NumPy/SciPy:
+#   sudo apt-get install libatlas-base-dev
+#
+# Se tiver erro com OpenCV:
+#   sudo apt-get install libopencv-dev python3-opencv
+#
+# Se tiver erro com GPS:
+#   sudo apt-get install gpsd gpsd-clients python3-gps
+#   sudo systemctl enable gpsd
+#   sudo systemctl start gpsd
+#
+# ============================================================================

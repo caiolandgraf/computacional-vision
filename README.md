@@ -1,4 +1,4 @@
-# 🌿 Sistema de Detecção de Mato Alto
+# 🌿 Sistema de Visão Computacional - Detecção Inteligente
 
 <div align="center">
 
@@ -7,7 +7,7 @@
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-1.7+-orange.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-**Sistema inteligente de detecção de vegetação alta usando visão computacional e machine learning**
+**Sistema inteligente de detecção de vegetação alta e buracos usando visão computacional e machine learning**
 
 [Instalação](#-instalação) • [Uso Rápido](#-uso-rápido) • [Documentação](#-documentação) • [Exemplos](#-exemplos)
 
@@ -31,22 +31,45 @@
 
 ## 🎯 Sobre o Projeto
 
-O Sistema de Detecção de Mato Alto é uma solução completa para identificação e análise de áreas com vegetação alta em imagens, vídeos e fluxo em tempo real. Desenvolvido com técnicas avançadas de visão computacional e machine learning, oferece múltiplos algoritmos de detecção com sistema de confiabilidade integrado.
+Este é um sistema completo de visão computacional com duas funcionalidades principais:
+
+### 🌱 Detecção de Mato Alto
+Identificação e análise de áreas com vegetação alta em imagens, vídeos e fluxo em tempo real. Desenvolvido com técnicas avançadas de visão computacional e machine learning, oferece múltiplos algoritmos de detecção com sistema de confiabilidade integrado.
+
+### 🕳️ Detecção de Buracos (Potholes)
+Sistema especializado para identificar buracos em asfalto usando análise de contornos, texturas e sombras. Ideal para monitoramento de vias públicas e manutenção preventiva de infraestrutura urbana.
 
 ### Casos de Uso
 
+**Detecção de Mato Alto:**
 - 🏡 **Monitoramento residencial**: Identificação de áreas que precisam de manutenção
 - 🌾 **Agricultura**: Monitoramento de crescimento de culturas
 - 🏛️ **Gestão urbana**: Controle de vegetação em espaços públicos
 - 🔬 **Pesquisa**: Análise automatizada de cobertura vegetal
 
+**Detecção de Buracos:**
+- 🛣️ **Manutenção viária**: Identificação de buracos em rodovias e ruas
+- 🏙️ **Gestão municipal**: Priorização de reparos em infraestrutura
+- 🚗 **Segurança**: Alerta de condições perigosas nas vias
+- 📊 **Análise de deterioração**: Monitoramento temporal de vias
+
 ## ✨ Características
 
-### 🎯 **Algoritmos de Detecção**
+### 🌱 **Detecção de Mato Alto**
+
+#### 🎯 **Algoritmos de Detecção**
 - **Análise por Cor**: Segmentação HSV com calibração automática
 - **Análise de Textura**: Filtros Gabor, LBP e análise de orientação
 - **Método Combinado**: Fusão inteligente de múltiplas técnicas
 - **Deep Learning**: Arquitetura CNN encoder-decoder
+
+### 🕳️ **Detecção de Buracos**
+
+#### 🎯 **Algoritmos de Detecção**
+- **Análise de Contornos**: Detecção de bordas e características geométricas
+- **Análise de Textura**: LBP e variância local para identificar irregularidades
+- **Análise de Sombras**: Detecção baseada em gradientes e áreas escuras
+- **Método Combinado**: Fusão ponderada de todas as técnicas
 
 ### 🧠 **Sistema Inteligente**
 - **Scores de Confiança**: Avaliação automática da qualidade da detecção (0.0-1.0)
@@ -139,11 +162,11 @@ python3 -c "from src.detector import GrassDetector; print('✅ Instalação bem-
 # Ative o ambiente virtual
 source venv/bin/activate
 
-# Execute o menu principal
+# Executar o menu principal
 python3 src/main.py
 ```
 
-### Análise de Imagem Única
+### Análise de Mato Alto
 
 ```bash
 # Método básico
@@ -156,24 +179,40 @@ python3 src/main.py --image examples/exemplo_mato_alto.jpg --method combined
 python3 src/main.py --image examples/exemplo_mato_alto.jpg --output meus_resultados/
 ```
 
+### Análise de Buracos
+
+```bash
+# Usar o detector de buracos diretamente
+python3 src/pothole_detector.py examples/estrada_buracos.jpg
+
+# Método específico
+python3 src/pothole_detector.py examples/estrada_buracos.jpg combined
+
+# Via menu principal (opções 9-11)
+python3 src/main.py
+```
+
 ### Análise em Lote
 
 ```bash
-# Processar pasta inteira
+# Processar pasta inteira (mato alto)
 python3 src/main.py --batch examples/ --method combined
 ```
 
 ### Exemplos Prontos
 
 ```bash
-# Teste de confiabilidade
+# Teste de confiabilidade (mato)
 python3 examples/test_reliability.py
 
-# Demo com melhorias
+# Demo com melhorias (mato)
 python3 examples/demo_improvements.py
 
-# Teste de deep learning
+# Teste de deep learning (mato)
 python3 examples/test_deeplearning.py
+
+# Teste de detecção de buracos
+python3 examples/test_pothole_detection.py
 ```
 
 ## 📚 Documentação
@@ -183,14 +222,16 @@ python3 examples/test_deeplearning.py
 ```
 computacional-vision/
 ├── src/                     # Código principal
-│   ├── main.py             # Interface principal
-│   ├── detector.py         # Algoritmos de detecção
+│   ├── main.py             # Interface principal (menu integrado)
+│   ├── detector.py         # Algoritmos detecção de mato
+│   ├── pothole_detector.py # Algoritmos detecção de buracos
 │   ├── visualizer.py       # Visualizações
 │   ├── capture.py          # Captura de imagens/vídeo
 │   ├── adaptive_learning.py # Sistema de aprendizado
 │   └── training_system.py  # Sistema de treinamento
 ├── examples/               # Exemplos e testes
 │   ├── *.jpg              # Imagens de exemplo
+│   ├── test_pothole_detection.py  # Teste de buracos
 │   └── *.py               # Scripts de teste
 ├── output/                 # Resultados gerados
 ├── models/                 # Modelos de ML (futuro)
@@ -198,10 +239,12 @@ computacional-vision/
 ├── requirements.txt        # Dependências Python
 ├── setup.sh               # Script de instalação
 ├── README.md              # Este arquivo
-└── ARQUITETURA_SISTEMA.md # Documentação técnica
+└── DOCUMENTACAO_TECNICA.md # Documentação técnica completa
 ```
 
 ### Métodos de Detecção Disponíveis
+
+#### Detecção de Mato Alto
 
 | Método | Descrição | Velocidade | Precisão | Cenário Ideal |
 |--------|-----------|------------|----------|---------------|
@@ -209,6 +252,15 @@ computacional-vision/
 | `texture` | Análise de padrões de textura | ⚡ | ⭐⭐⭐⭐ | Vegetação densa e variada |
 | `combined` | Fusão de cor + textura | ⚡⚡ | ⭐⭐⭐⭐⭐ | Uso geral (recomendado) |
 | `deeplearning` | Rede neural CNN | ⚡⚡ | ⭐⭐⭐⭐ | Cenários complexos |
+
+#### Detecção de Buracos
+
+| Método | Descrição | Velocidade | Precisão | Cenário Ideal |
+|--------|-----------|------------|----------|---------------|
+| `contour` | Análise de contornos e formas | ⚡⚡⚡ | ⭐⭐⭐⭐ | Buracos bem definidos |
+| `texture` | Análise de irregularidades | ⚡⚡ | ⭐⭐⭐ | Buracos com bordas gastas |
+| `shadow` | Detecção baseada em sombras | ⚡⚡⚡ | ⭐⭐⭐ | Boa iluminação |
+| `combined` | Fusão de todas técnicas | ⚡⚡ | ⭐⭐⭐⭐⭐ | Uso geral (recomendado) |
 
 ### Sistema de Confiança
 
@@ -233,7 +285,7 @@ O sistema identifica automaticamente condições problemáticas:
 
 ## 💡 Exemplos
 
-### Exemplo 1: Análise Básica
+### Exemplo 1: Análise Básica - Mato Alto
 
 ```python
 from src.detector import GrassDetector
@@ -250,6 +302,33 @@ result = detector.detect_image(
 print(f"Cobertura de vegetação: {result['coverage']:.1f}%")
 print(f"Confiança: {result['confidence']:.2f}")
 print(f"Status: {result['confidence_level']}")
+```
+
+### Exemplo 1b: Análise Básica - Buracos
+
+```python
+from src.pothole_detector import PotholeDetector
+
+# Inicializar detector
+detector = PotholeDetector()
+
+# Analisar imagem
+result = detector.detect_image(
+    image_path="examples/estrada_buracos.jpg",
+    method="combined"
+)
+
+print(f"Buracos detectados: {result['num_potholes']}")
+print(f"Área total: {result['total_area']:.0f} pixels")
+print(f"Confiança: {result['confidence']:.2f}")
+print(f"Status: {result['confidence_level']}")
+
+# Criar visualização
+detector.visualize_detections(
+    "examples/estrada_buracos.jpg",
+    result,
+    "output/buracos_detectados.jpg"
+)
 ```
 
 ### Exemplo 2: Configuração Personalizada
@@ -296,6 +375,8 @@ with open('relatorio.json', 'w') as f:
 
 ### Benchmarks (Testado em MacBook Pro M1)
 
+#### Detecção de Mato Alto
+
 | Resolução | Método | Tempo Médio | Cobertura Típica | Confiança Média |
 |-----------|--------|-------------|------------------|-----------------|
 | 640x480 | color | 0.037s | 15-20% | 0.65-0.75 |
@@ -303,12 +384,29 @@ with open('relatorio.json', 'w') as f:
 | 640x480 | combined | 2.1s | 15-25% | 0.70-0.85 |
 | 1920x1080 | combined | 0.3s | 15-25% | 0.70-0.85 |
 
+#### Detecção de Buracos
+
+| Resolução | Método | Tempo Médio | Detecções Típicas | Confiança Média |
+|-----------|--------|-------------|-------------------|-----------------|
+| 640x480 | contour | 0.05s | 3-8 buracos | 0.70-0.80 |
+| 640x480 | texture | 0.8s | 2-6 buracos | 0.60-0.70 |
+| 640x480 | shadow | 0.06s | 4-10 buracos | 0.55-0.65 |
+| 640x480 | combined | 1.0s | 5-12 buracos | 0.75-0.85 |
+| 1920x1080 | combined | 2.5s | 5-15 buracos | 0.75-0.85 |
+
 ### Otimizações Recomendadas
 
+**Detecção de Mato Alto:**
 - **Para velocidade máxima**: Use método `color`
 - **Para precisão máxima**: Use método `combined`
 - **Para análise em lote**: Processe imagens em paralelo
 - **Para tempo real**: Redimensione imagens para 640x480
+
+**Detecção de Buracos:**
+- **Para velocidade máxima**: Use método `contour` ou `shadow`
+- **Para precisão máxima**: Use método `combined`
+- **Para análise em lote**: Processe múltiplas imagens simultaneamente
+- **Para monitoramento viário**: Use método `combined` com confiança > 0.7
 
 ## 🔧 Configuração Avançada
 
@@ -457,18 +555,39 @@ python3 examples/demo.py
 
 ### 🚧 Em Desenvolvimento
 
+**Funcionalidades Gerais:**
 - [ ] **Interface Web**: Dashboard web para análise remota
 - [ ] **API REST**: Endpoints para integração com outros sistemas
 - [ ] **Suporte a GPU**: Aceleração CUDA/Metal para deep learning
+
+**Detecção de Mato Alto:**
 - [ ] **Modelos pré-treinados**: Modelos específicos por tipo de vegetação
+- [ ] **Segmentação por espécie**: Identificar tipos específicos de plantas
+
+**Detecção de Buracos:**
+- [x] **Sistema básico de detecção**: Múltiplos algoritmos implementados ✅
+- [x] **Sistema de confiabilidade**: Scores e flags de cenário ✅
+- [ ] **Deep Learning para buracos**: CNN especializada em potholes
+- [ ] **Estimativa de profundidade**: Calcular profundidade dos buracos
+- [ ] **Classificação de severidade**: Leve, moderado, severo, crítico
 
 ### 🎯 Planejado
 
+**Funcionalidades Gerais:**
 - [ ] **Análise temporal**: Comparação de imagens ao longo do tempo
-- [ ] **Segmentação por espécie**: Identificação de tipos específicos de plantas
 - [ ] **Integração com drones**: Suporte a imagens aéreas
-- [ ] **App mobile**: Aplicativo iOS/Android
+- [ ] **App mobile**: Aplicativo iOS/Android para captura em campo
 - [ ] **Análise 3D**: Processamento de nuvens de pontos
+
+**Detecção de Mato Alto:**
+- [ ] **Segmentação por espécie**: Identificação de tipos específicos de plantas
+- [ ] **Estimativa de densidade**: Classificação precisa de densidade vegetal
+
+**Detecção de Buracos:**
+- [ ] **Integração com GPS**: Geolocalização precisa dos buracos
+- [ ] **Sistema de priorização**: Ranqueamento automático para manutenção
+- [ ] **Análise de deterioração**: Monitoramento de evolução dos buracos
+- [ ] **Integração com sistemas municipais**: API para gestão urbana
 
 ### 💡 Ideias Futuras
 

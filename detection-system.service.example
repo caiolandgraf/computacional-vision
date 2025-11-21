@@ -1,0 +1,138 @@
+[Unit]
+Description=Sistema de Detecção com GPS e Upload Automático para Raspberry Pi
+Documentation=https://github.com/seu-usuario/computacional-vision
+After=network-online.target gpsd.service
+Wants=network-online.target
+Requires=gpsd.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/computacional-vision
+Environment="PYTHONUNBUFFERED=1"
+
+# Comando principal
+ExecStart=/usr/bin/python3 /home/pi/computacional-vision/src/rpi/main_rpi.py --config /home/pi/computacional-vision/config_rpi.json --mode continuous
+
+# Restart automático em caso de falha
+Restart=always
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+# Timeout
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+# Logs
+StandardOutput=append:/home/pi/computacional-vision/logs/system.log
+StandardError=append:/home/pi/computacional-vision/logs/system_error.log
+SyslogIdentifier=detection-system
+
+# Recursos (ajuste conforme necessário)
+# Limita uso de memória (opcional)
+# MemoryMax=1G
+# MemoryHigh=800M
+
+# Limita uso de CPU (opcional)
+# CPUQuota=80%
+
+# Nice level (prioridade)
+Nice=5
+
+# Permissões
+# Garante acesso a GPIO, câmera e dispositivos seriais
+SupplementaryGroups=video dialout gpio i2c spi
+
+# Segurança (ajuste conforme necessário)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/computacional-vision/captures /home/pi/computacional-vision/queue /home/pi/computacional-vision/logs
+
+# Diretório temporário
+RuntimeDirectory=detection-system
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target
+
+# ============================================================================
+# INSTRUÇÕES DE INSTALAÇÃO
+# ============================================================================
+#
+# 1. Copie este arquivo para /etc/systemd/system/:
+#    sudo cp detection-system.service.example /etc/systemd/system/detection-system.service
+#
+# 2. Edite os caminhos se necessário:
+#    sudo nano /etc/systemd/system/detection-system.service
+#
+#    Altere:
+#    - User=pi              # Seu usuário
+#    - WorkingDirectory     # Caminho do projeto
+#    - ExecStart            # Caminho do script
+#
+# 3. Recarregue o systemd:
+#    sudo systemctl daemon-reload
+#
+# 4. Habilite o serviço (auto-start no boot):
+#    sudo systemctl enable detection-system
+#
+# 5. Inicie o serviço:
+#    sudo systemctl start detection-system
+#
+# ============================================================================
+# COMANDOS ÚTEIS
+# ============================================================================
+#
+# Ver status:
+#   sudo systemctl status detection-system
+#
+# Iniciar:
+#   sudo systemctl start detection-system
+#
+# Parar:
+#   sudo systemctl stop detection-system
+#
+# Reiniciar:
+#   sudo systemctl restart detection-system
+#
+# Desabilitar auto-start:
+#   sudo systemctl disable detection-system
+#
+# Ver logs em tempo real:
+#   journalctl -u detection-system -f
+#
+# Ver logs das últimas 100 linhas:
+#   journalctl -u detection-system -n 100
+#
+# Ver logs de hoje:
+#   journalctl -u detection-system --since today
+#
+# Ver logs com erros:
+#   journalctl -u detection-system -p err
+#
+# Limpar logs antigos:
+#   sudo journalctl --vacuum-time=7d
+#
+# ============================================================================
+# TROUBLESHOOTING
+# ============================================================================
+#
+# Serviço não inicia:
+#   - Verifique os caminhos no arquivo
+#   - Verifique permissões: ls -la /home/pi/computacional-vision
+#   - Verifique logs: journalctl -u detection-system -n 50
+#
+# Erro de permissão câmera/GPS:
+#   - Adicione usuário aos grupos: sudo usermod -a -G video,dialout,gpio pi
+#   - Faça logout/login
+#
+# Alto uso de CPU/memória:
+#   - Descomente as linhas MemoryMax/CPUQuota
+#   - Aumente capture_interval no config_rpi.json
+#   - Reduza resize_width no config_rpi.json
+#
+# ============================================================================

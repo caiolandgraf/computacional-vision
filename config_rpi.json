@@ -1,0 +1,110 @@
+{
+  "_comment": "Configuração otimizada para Raspberry Pi 4 Model B",
+  "_version": "1.0",
+  "_description": "Sistema de detecção com GPS e upload automático",
+
+  "api": {
+    "_description": "Configurações da API para upload de dados",
+    "url": "https://sua-api.com/api",
+    "key": null,
+    "_key_note": "Coloque sua API key aqui se necessário",
+    "queue_dir": "queue",
+    "max_retries": 3,
+    "timeout": 30.0
+  },
+
+  "gps": {
+    "_description": "Configurações do GPS",
+    "backend": "gpsd",
+    "_backend_options": "Opções: 'gpsd' (recomendado), 'serial', 'mock' (para testes)",
+    "device": "/dev/ttyAMA0",
+    "_device_note": "Para GPS USB, use /dev/ttyUSB0 ou /dev/ttyACM0",
+    "baudrate": 9600,
+    "timeout": 5.0
+  },
+
+  "detector": {
+    "_description": "Configurações do detector",
+    "type": "pothole",
+    "_type_options": "'pothole' (buracos) ou 'grass' (mato alto)",
+    "min_confidence": 0.5,
+    "resize_width": 640,
+    "_resize_note": "Reduz resolução para otimizar processamento. 640px é ideal para RPi4"
+  },
+
+  "camera": {
+    "_description": "Configurações da câmera",
+    "index": 0,
+    "_index_note": "0 = primeira câmera, 1 = segunda, etc",
+    "width": 1280,
+    "height": 720,
+    "_resolution_note": "720p é ideal para equilíbrio entre qualidade e performance"
+  },
+
+  "capture_dir": "captures",
+  "_capture_dir_note": "Diretório temporário para imagens capturadas",
+
+  "capture_interval": 5.0,
+  "_capture_interval_note": "Intervalo entre capturas em segundos (modo contínuo)",
+
+  "save_annotated": false,
+  "_save_annotated_note": "Salvar imagens com anotações (bounding boxes). Desabilitar para economizar espaço",
+
+  "logging": {
+    "_description": "Configurações de log",
+    "level": "INFO",
+    "_level_options": "DEBUG, INFO, WARNING, ERROR",
+    "file": "detection_system.log",
+    "max_size_mb": 10,
+    "backup_count": 3
+  },
+
+  "performance": {
+    "_description": "Otimizações de performance para Raspberry Pi",
+    "opencv_threads": 2,
+    "_opencv_threads_note": "Número de threads para OpenCV (2-4 é ideal para RPi4)",
+    "enable_gpu": false,
+    "_enable_gpu_note": "Deixe false - RPi4 não tem GPU acelerável para OpenCV",
+    "low_power_mode": false,
+    "_low_power_mode_note": "Reduz frequência de CPU para economizar energia"
+  },
+
+  "_usage_examples": {
+    "continuous": "python3 src/rpi/main_rpi.py --config config_rpi.json --mode continuous",
+    "single_image": "python3 src/rpi/main_rpi.py --config config_rpi.json --mode single --image foto.jpg"
+  },
+
+  "_setup_instructions": {
+    "1": "Edite este arquivo e configure a URL da API em 'api.url'",
+    "2": "Se necessário, configure a API key em 'api.key'",
+    "3": "Configure o backend GPS (gpsd recomendado para Raspberry Pi)",
+    "4": "Escolha o tipo de detecção: 'pothole' ou 'grass'",
+    "5": "Ajuste o intervalo de captura conforme necessário",
+    "6": "Execute: python3 src/rpi/main_rpi.py --config config_rpi.json"
+  },
+
+  "_gps_setup_raspberry_pi": {
+    "gpsd_install": "sudo apt-get install gpsd gpsd-clients python3-gps",
+    "gpsd_configure": "sudo systemctl enable gpsd && sudo systemctl start gpsd",
+    "test_gps": "cgps -s",
+    "serial_permissions": "sudo usermod -a -G dialout $USER"
+  },
+
+  "_recommended_settings": {
+    "urban_detection": {
+      "capture_interval": 3.0,
+      "min_confidence": 0.6,
+      "resize_width": 640
+    },
+    "highway_detection": {
+      "capture_interval": 2.0,
+      "min_confidence": 0.5,
+      "resize_width": 800
+    },
+    "low_power": {
+      "capture_interval": 10.0,
+      "min_confidence": 0.7,
+      "resize_width": 480
+    }
+  }
+}
