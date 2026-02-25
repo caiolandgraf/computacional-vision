@@ -283,17 +283,13 @@ def start_api_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = Fal
     logger.info(dim(f"  Pressione Ctrl+C para parar"))
     logger.info("")
 
-    uvicorn.run(
-        "api:app",
-        host=host,
-        port=port,
-        reload=reload,
-        app_dir=str(SCRIPT_DIR),
-        log_level="info",
-        access_log=True,
-        workers=8,  # 👈 AQUI
-    )
-
+subprocess.run([
+    "gunicorn",
+    "-w", "4",
+    "-k", "uvicorn.workers.UvicornWorker",
+    "api:app",
+    "--bind", f"{host}:{port}",
+])
 
 def start_dev_mode(host: str = "0.0.0.0", port: int = 8000):
     """Inicia em modo desenvolvimento: backend + frontend dev server."""
