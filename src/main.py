@@ -7,23 +7,26 @@ Interface principal para o sistema de detecção de áreas com mato alto
 usando visão computacional.
 """
 
-import cv2
-import numpy as np
+import argparse
+import logging
 import os
 import sys
-from pathlib import Path
-from typing import Optional, List, Dict, Any
-import logging
-import argparse
+import threading
+import time
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import cv2
+import numpy as np
 
 # Adiciona o diretório src ao path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from capture import ImageCapture
 from detector import GrassDetector
-from visualizer import ResultVisualizer
 from pothole_detector import PotholeDetector
+from visualizer import ResultVisualizer
 
 # Configuração de logging
 logging.basicConfig(
@@ -46,6 +49,9 @@ class GrassDetectionSystem:
         # Configurações
         self.output_dir = Path("output")
         self.output_dir.mkdir(exist_ok=True)
+
+        # Controle de tempo para salvamento automático
+        self._last_save_time = 0.0
 
         # Modo de visualização padrão
         self.visualization_mode = 'bounding_box'  # 'bounding_box' ou 'overlay'
@@ -70,6 +76,7 @@ class GrassDetectionSystem:
         print("3. Captura em tempo real - webcam (mato)")
         print("4. Análise em lote (mato)")
         print("5. Comparar métodos de detecção (mato)")
+        print("12. Processar vídeo com overlay (gera vídeo de saída)")
         print("\n🕳️  DETECÇÃO DE BURACOS:")
         print("9. Analisar buracos em foto")
         print("10. Análise em lote de buracos")
@@ -193,7 +200,7 @@ class GrassDetectionSystem:
             print(f"❌ Arquivo não encontrado: {video_path}")
             return
 
-        method = self.display_detection_method()
+        method = self.display_detection_menu()
 
         # Configurações de processamento
         process_every_n_frames = int(input("Processar a cada N frames (padrão: 30): ") or "30")
@@ -244,8 +251,373 @@ class GrassDetectionSystem:
             logger.error(f"Erro no processamento do vídeo: {str(e)}")
             print(f"❌ Erro durante o processamento: {str(e)}")
 
+    def process_video_with_overlay(self) -> None:
+        """Processa um vídeo e gera vídeo de saída com overlay de detecção (igual à webcam)."""
+        print("\n🎬 PROCESSAMENTO DE VÍDEO COM OVERLAY")
+        print("="*60)
+        print("Este modo processa cada frame do vídeo, aplica a detecção")
+        print("e gera um novo vídeo com as áreas verdes e porcentagens.")
+        print("="*60)
+
+        video_path = input("\nDigite o caminho do vídeo de entrada: ").strip().strip('"')
+
+        if not Path(video_path).exists():
+            print(f"❌ Arquivo não encontrado: {video_path}")
+            return
+
+        # Verifica formato do vídeo
+        video_ext = Path(video_path).suffix.lower()
+        if video_ext not in ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv']:
+            print(f"❌ Formato de vídeo não suportado: {video_ext}")
+            return
+
+        method = self.display_detection_menu()
+
+        # Modo de qualidade
+        print("\n🎯 MODO DE PROCESSAMENTO:")
+        print("1. Rápido (modo tempo real - menor qualidade de detecção)")
+        print("2. Alta precisão (lento - melhor qualidade de detecção)")
+        quality_mode = input("Escolha o modo (1-2, padrão: 1): ").strip() or "1"
+
+        if quality_mode == "2":
+            self.detector.set_precision_mode(True)
+            realtime_mode = False
+            print("🎯 Modo alta precisão selecionado")
+        else:
+            self.detector.set_realtime_mode(True)
+            realtime_mode = True
+            print("🚀 Modo rápido selecionado")
+
+        # Modo visual
+        print("\n🎨 MODO VISUAL DO OVERLAY:")
+        print("1. Overlay leve (estilo webcam tempo real)")
+        print("2. Overlay completo (estilo clássico)")
+        print("3. Dashboard moderno (bounding boxes + painel)")
+        visual_mode = input("Escolha o modo visual (1-3, padrão: 1): ").strip() or "1"
+
+        # Preview em tempo real?
+        show_preview = input("\nMostrar preview durante processamento? (s/n, padrão: n): ").strip().lower().startswith('s')
+
+        # Abre o vídeo de entrada
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print("❌ Erro ao abrir o vídeo")
+            return
+
+        # Obtém propriedades do vídeo
+        input_fps = cap.get(cv2.CAP_PROP_FPS)
+        input_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        input_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = total_frames / input_fps if input_fps > 0 else 0
+
+        print(f"\n📊 INFORMAÇÕES DO VÍDEO:")
+        print(f"   Resolução: {input_width}x{input_height}")
+        print(f"   FPS: {input_fps:.2f}")
+        print(f"   Total de frames: {total_frames}")
+        print(f"   Duração: {duration:.1f}s ({duration/60:.1f}min)")
+
+        # Define caminho de saída
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        video_name = Path(video_path).stem
+        output_filename = f"{video_name}_overlay_{method}_{timestamp}.mp4"
+        output_path = self.output_dir / output_filename
+
+        # Determina o tamanho do frame de saída baseado no modo visual
+        if visual_mode == "3":
+            # Dashboard moderno: imagem principal + painel lateral (30%)
+            panel_width = int(input_width * 0.3)
+            output_width = input_width + panel_width
+            output_height = input_height
+        else:
+            output_width = input_width
+            output_height = input_height
+
+        # Configura o writer de vídeo de saída
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out_writer = cv2.VideoWriter(str(output_path), fourcc, input_fps, (output_width, output_height))
+
+        if not out_writer.isOpened():
+            print("❌ Erro ao criar arquivo de vídeo de saída")
+            cap.release()
+            return
+
+        print(f"\n🔄 Processando vídeo... Saída: {output_path}")
+        print(f"   Resolução de saída: {output_width}x{output_height}")
+        print("   Pressione Ctrl+C para cancelar\n")
+
+        if show_preview:
+            window_name = 'Preview - Processamento de Vídeo'
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(window_name, min(output_width, 1280), min(output_height, 720))
+
+        frame_count = 0
+        total_coverage = 0.0
+        max_coverage = 0.0
+        min_coverage = 100.0
+        fps_timer = time.time()
+        fps_frame_count = 0
+        processing_fps = 0.0
+
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                frame_count += 1
+                fps_frame_count += 1
+
+                # Calcula FPS de processamento
+                now = time.time()
+                elapsed = now - fps_timer
+                if elapsed >= 1.0:
+                    processing_fps = fps_frame_count / elapsed
+                    fps_frame_count = 0
+                    fps_timer = now
+
+                # Detecta mato
+                mask, stats = self.detector.detect_grass_areas(frame, method)
+                coverage = stats.get('coverage_percentage', 0)
+                total_coverage += coverage
+                max_coverage = max(max_coverage, coverage)
+                min_coverage = min(min_coverage, coverage)
+
+                # Cria visualização baseada no modo escolhido
+                if visual_mode == "2":
+                    # Overlay completo clássico
+                    viz = self.visualizer.create_overlay_visualization(frame, mask, stats)
+                elif visual_mode == "3":
+                    # Dashboard moderno com painel lateral
+                    density_analysis = self.detector.analyze_grass_density(mask)
+                    viz = self.visualizer.create_detailed_analysis_panel(
+                        frame, mask, stats, density_analysis,
+                        visualization_type='bounding_box')
+                else:
+                    # Overlay leve estilo webcam (padrão / modo "1")
+                    viz = self._create_video_overlay(frame, mask, stats, processing_fps,
+                                                     frame_count, total_frames)
+
+                # Garante que o frame de saída tem o tamanho correto
+                viz_h, viz_w = viz.shape[:2]
+                if viz_w != output_width or viz_h != output_height:
+                    viz = cv2.resize(viz, (output_width, output_height))
+
+                # Escreve frame no vídeo de saída
+                out_writer.write(viz)
+
+                # Mostra progresso
+                progress = (frame_count / total_frames * 100) if total_frames > 0 else 0
+                eta_seconds = ((total_frames - frame_count) / processing_fps) if processing_fps > 0 else 0
+                eta_min = int(eta_seconds // 60)
+                eta_sec = int(eta_seconds % 60)
+                print(f"   Frame {frame_count}/{total_frames} ({progress:.1f}%) | "
+                      f"Cobertura: {coverage:.1f}% | "
+                      f"FPS: {processing_fps:.1f} | "
+                      f"ETA: {eta_min}m{eta_sec:02d}s", end='\r')
+
+                # Preview
+                if show_preview:
+                    cv2.imshow(window_name, viz)
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord('q') or key == 27:
+                        print("\n\n⚠️  Processamento cancelado pelo usuário")
+                        break
+
+            # Estatísticas finais
+            avg_coverage = total_coverage / frame_count if frame_count > 0 else 0
+
+            print(f"\n\n✅ PROCESSAMENTO CONCLUÍDO!")
+            print(f"="*60)
+            print(f"   📁 Vídeo de saída: {output_path}")
+            print(f"   🎞️  Frames processados: {frame_count}/{total_frames}")
+            print(f"   📊 Cobertura média: {avg_coverage:.2f}%")
+            print(f"   📈 Cobertura máxima: {max_coverage:.2f}%")
+            print(f"   📉 Cobertura mínima: {min_coverage:.2f}%")
+            print(f"   ⚡ FPS de processamento: {processing_fps:.1f}")
+            print(f"="*60)
+
+            # Salva relatório
+            report_path = self.output_dir / f"{video_name}_report_{timestamp}.txt"
+            with open(report_path, 'w', encoding='utf-8') as f:
+                f.write("RELATÓRIO DE PROCESSAMENTO DE VÍDEO\n")
+                f.write("="*50 + "\n\n")
+                f.write(f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
+                f.write(f"Vídeo de entrada: {video_path}\n")
+                f.write(f"Vídeo de saída: {output_path}\n")
+                f.write(f"Método de detecção: {method}\n")
+                f.write(f"Modo de qualidade: {'Alta precisão' if not realtime_mode else 'Rápido'}\n")
+                f.write(f"Modo visual: {visual_mode}\n\n")
+                f.write(f"Resolução: {input_width}x{input_height}\n")
+                f.write(f"FPS: {input_fps}\n")
+                f.write(f"Frames processados: {frame_count}/{total_frames}\n")
+                f.write(f"Duração: {duration:.1f}s\n\n")
+                f.write(f"Cobertura média: {avg_coverage:.2f}%\n")
+                f.write(f"Cobertura máxima: {max_coverage:.2f}%\n")
+                f.write(f"Cobertura mínima: {min_coverage:.2f}%\n")
+            print(f"   📝 Relatório salvo: {report_path}")
+
+            # Pergunta se quer abrir o vídeo
+            if input("\nDeseja abrir o vídeo de saída? (s/n): ").strip().lower() == 's':
+                import platform
+                if platform.system() == 'Darwin':
+                    os.system(f'open "{output_path}"')
+                elif platform.system() == 'Windows':
+                    os.system(f'start "" "{output_path}"')
+                else:
+                    os.system(f'xdg-open "{output_path}"')
+
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Processamento interrompido pelo usuário")
+            avg_coverage = total_coverage / frame_count if frame_count > 0 else 0
+            print(f"   Frames processados até agora: {frame_count}")
+            print(f"   Cobertura média parcial: {avg_coverage:.2f}%")
+        except Exception as e:
+            logger.error(f"Erro no processamento do vídeo: {str(e)}")
+            print(f"\n❌ Erro durante o processamento: {str(e)}")
+        finally:
+            cap.release()
+            out_writer.release()
+            if show_preview:
+                cv2.destroyAllWindows()
+
+    def _create_video_overlay(self, frame: np.ndarray, mask: np.ndarray,
+                               stats: Dict, fps: float,
+                               current_frame: int, total_frames: int) -> np.ndarray:
+        """Cria visualização leve para processamento de vídeo (estilo webcam)."""
+        result = frame.copy()
+        height, width = result.shape[:2]
+
+        # Overlay verde semi-transparente nas áreas detectadas
+        green_overlay = result.copy()
+        green_overlay[mask > 0] = [0, 200, 80]
+        cv2.addWeighted(green_overlay, 0.35, result, 0.65, 0, result)
+
+        # Desenha contornos
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Filtra contornos pequenos e desenha
+        significant_contours = [c for c in contours if cv2.contourArea(c) > 300]
+        cv2.drawContours(result, significant_contours, -1, (0, 255, 100), 2)
+
+        # Desenha bounding boxes nos contornos significativos
+        for contour in significant_contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            area = cv2.contourArea(contour)
+            area_m2 = area * 0.0001
+
+            # Bounding box
+            cv2.rectangle(result, (x, y), (x + w, y + h), (0, 255, 100), 2)
+
+            # Cantos decorativos
+            corner_len = min(15, w // 4, h // 4)
+            cv2.line(result, (x, y), (x + corner_len, y), (50, 255, 50), 3)
+            cv2.line(result, (x, y), (x, y + corner_len), (50, 255, 50), 3)
+            cv2.line(result, (x + w, y), (x + w - corner_len, y), (50, 255, 50), 3)
+            cv2.line(result, (x + w, y), (x + w, y + corner_len), (50, 255, 50), 3)
+            cv2.line(result, (x, y + h), (x + corner_len, y + h), (50, 255, 50), 3)
+            cv2.line(result, (x, y + h), (x, y + h - corner_len), (50, 255, 50), 3)
+            cv2.line(result, (x + w, y + h), (x + w - corner_len, y + h), (50, 255, 50), 3)
+            cv2.line(result, (x + w, y + h), (x + w, y + h - corner_len), (50, 255, 50), 3)
+
+            # Label com área
+            if area_m2 >= 0.01:
+                label = f"{area_m2:.2f}m2"
+                label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+                cv2.rectangle(result, (x, y - label_size[1] - 8), (x + label_size[0] + 6, y), (30, 30, 30), -1)
+                cv2.putText(result, label, (x + 3, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 100), 1, cv2.LINE_AA)
+
+        coverage = stats.get('coverage_percentage', 0)
+
+        # Barra de status no topo
+        cv2.rectangle(result, (0, 0), (width, 50), (30, 30, 30), -1)
+        cv2.rectangle(result, (0, 0), (width, 3), (0, 255, 100), -1)
+
+        # Texto principal
+        method_label = stats.get('method', 'combined').upper()
+        status = f"DETECCAO MATO | {method_label} | Cobertura: {coverage:.1f}% | Regioes: {len(significant_contours)}"
+        cv2.putText(result, status, (10, 28),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+
+        # Barra de progresso no topo
+        progress = current_frame / total_frames if total_frames > 0 else 0
+        bar_width = int(width * progress)
+        cv2.rectangle(result, (0, 46), (bar_width, 50), (0, 255, 100), -1)
+        cv2.rectangle(result, (bar_width, 46), (width, 50), (60, 60, 60), -1)
+
+        # Painel inferior
+        bottom_panel_y = height - 45
+        cv2.rectangle(result, (0, bottom_panel_y), (width, height), (30, 30, 30), -1)
+        cv2.rectangle(result, (0, bottom_panel_y), (width, bottom_panel_y + 3), (0, 255, 100), -1)
+
+        # Info no painel inferior
+        progress_text = f"Frame: {current_frame}/{total_frames} ({progress*100:.1f}%)"
+        cv2.putText(result, progress_text, (10, height - 15),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+
+        fps_text = f"FPS: {fps:.1f}"
+        fps_size = cv2.getTextSize(fps_text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0]
+        cv2.putText(result, fps_text, (width // 2 - fps_size[0] // 2, height - 15),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 100), 1, cv2.LINE_AA)
+
+        # Indicador de cobertura com cor dinâmica
+        if coverage > 50:
+            cov_color = (0, 0, 255)  # Vermelho = muito mato
+        elif coverage > 25:
+            cov_color = (0, 165, 255)  # Laranja
+        else:
+            cov_color = (0, 255, 100)  # Verde = pouco mato
+
+        cov_text = f"Cobertura: {coverage:.1f}%"
+        cov_size = cv2.getTextSize(cov_text, cv2.FONT_HERSHEY_DUPLEX, 0.6, 2)[0]
+        cv2.putText(result, cov_text, (width - cov_size[0] - 15, height - 15),
+                    cv2.FONT_HERSHEY_DUPLEX, 0.6, cov_color, 2, cv2.LINE_AA)
+
+        # Mini barra de cobertura no canto superior direito
+        bar_x = width - 160
+        bar_y = 10
+        bar_h = 28
+        bar_max_w = 145
+        cv2.rectangle(result, (bar_x, bar_y), (bar_x + bar_max_w, bar_y + bar_h), (60, 60, 60), -1)
+        fill_w = int(bar_max_w * min(coverage / 100.0, 1.0))
+        cv2.rectangle(result, (bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h), cov_color, -1)
+        cv2.rectangle(result, (bar_x, bar_y), (bar_x + bar_max_w, bar_y + bar_h), (200, 200, 200), 1)
+        pct_text = f"{coverage:.0f}%"
+        pct_size = cv2.getTextSize(pct_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+        cv2.putText(result, pct_text, (bar_x + bar_max_w // 2 - pct_size[0] // 2, bar_y + bar_h - 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+
+        return result
+
+    def _create_fast_overlay(self, frame: np.ndarray, mask: np.ndarray,
+                             stats: Dict, fps: float) -> np.ndarray:
+        """Cria visualização leve e rápida para modo tempo real."""
+        result = frame.copy()
+        height, width = result.shape[:2]
+
+        # Overlay verde semi-transparente nas áreas detectadas (operação rápida)
+        green_overlay = result.copy()
+        green_overlay[mask > 0] = [0, 200, 80]
+        cv2.addWeighted(green_overlay, 0.35, result, 0.65, 0, result)
+
+        # Desenha contornos (mais rápido que bounding boxes completos)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(result, contours, -1, (0, 255, 100), 2)
+
+        # Barra de status no topo (simples e rápida)
+        cv2.rectangle(result, (0, 0), (width, 40), (30, 30, 30), -1)
+        cv2.rectangle(result, (0, 0), (width, 3), (0, 255, 100), -1)
+
+        coverage = stats.get('coverage_percentage', 0)
+        mode_label = "TEMPO REAL" if self.detector.realtime_params['enabled'] else "PRECISÃO"
+        status = f"{mode_label} | Cobertura: {coverage:.1f}% | FPS: {fps:.0f} | Regioes: {len(contours)}"
+        cv2.putText(result, status, (10, 28),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+
+        return result
+
     def webcam_realtime(self) -> None:
-        """Captura e análise em tempo real da webcam."""
+        """Captura e análise em tempo real da webcam com threading."""
         print("\n📹 CAPTURA EM TEMPO REAL")
 
         # Lista câmeras disponíveis
@@ -265,21 +637,16 @@ class GrassDetectionSystem:
         print("2. Alta precisão (lento, qualidade máxima)")
         print("3. Adaptativo (escolha automática)")
 
-        quality_mode = input("Escolha o modo (1-3, padrão: 3): ").strip() or "3"
+        quality_mode = input("Escolha o modo (1-3, padrão: 1): ").strip() or "1"
 
         # Configurações de qualidade
-        if quality_mode == "1":
-            # Modo tempo real forçado
-            self.detector.set_realtime_mode(True)
-            realtime_mode = True
-            print("🚀 Modo tempo real selecionado - priorizando velocidade")
-        elif quality_mode == "2":
+        if quality_mode == "2":
             # Modo alta precisão forçado
             self.detector.set_precision_mode(True)
             realtime_mode = False
             print("🎯 Modo alta precisão selecionado - priorizando qualidade")
-        else:
-            # Modo adaptativo (padrão anterior)
+        elif quality_mode == "3":
+            # Modo adaptativo
             realtime_mode = method in ['texture', 'combined', 'deeplearning']
             if realtime_mode:
                 print("🤖 Modo adaptativo: tempo real ativado para melhor performance")
@@ -287,6 +654,11 @@ class GrassDetectionSystem:
             else:
                 print("⚡ Modo adaptativo: alta qualidade para método rápido")
                 self.detector.set_precision_mode(True)
+        else:
+            # Modo tempo real forçado (padrão agora)
+            self.detector.set_realtime_mode(True)
+            realtime_mode = True
+            print("🚀 Modo tempo real selecionado - priorizando velocidade")
 
         # Configurações
         save_detections = input("Salvar detecções interessantes? (s/n): ").lower().startswith('s')
@@ -298,95 +670,143 @@ class GrassDetectionSystem:
         print("⏳ Aguarde alguns segundos para a webcam inicializar...")
 
         # Pré-cria a janela para garantir foco
-        cv2.namedWindow('Detecção de Mato - Tempo Real', cv2.WINDOW_AUTOSIZE)
-        cv2.moveWindow('Detecção de Mato - Tempo Real', 100, 100)
+        window_name = 'Detecção de Mato - Tempo Real'
+        cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+        cv2.moveWindow(window_name, 100, 100)
 
         # Exibe imagem de aguardo
         waiting_img = np.zeros((480, 640, 3), dtype=np.uint8)
         waiting_img[:] = (40, 40, 40)
         cv2.putText(waiting_img, "INICIANDO WEBCAM...", (180, 220), cv2.FONT_HERSHEY_DUPLEX, 1, (255, 255, 255), 2)
         cv2.putText(waiting_img, "Aguarde alguns segundos", (200, 260), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 1)
-        cv2.imshow('Detecção de Mato - Tempo Real', waiting_img)
-        cv2.waitKey(2000)  # Aguarda 2 segundos
+        cv2.imshow(window_name, waiting_img)
+        cv2.waitKey(500)
+
+        # --- Captura com thread separada para não bloquear processamento ---
+        cap = cv2.VideoCapture(camera_index)
+        if not cap.isOpened():
+            print("❌ Erro ao acessar câmera")
+            return
+
+        # Configura câmera
+        if realtime_mode:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        else:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cap.set(cv2.CAP_PROP_FPS, 30)
+
+        # Variáveis compartilhadas com a thread de captura
+        latest_frame = [None]  # Usa lista para mutabilidade em closure
+        frame_lock = threading.Lock()
+        stop_event = threading.Event()
+
+        def capture_thread():
+            """Thread dedicada para captura contínua — sempre tem o frame mais recente."""
+            while not stop_event.is_set():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                with frame_lock:
+                    latest_frame[0] = frame
+
+        # Inicia thread de captura
+        cap_thread = threading.Thread(target=capture_thread, daemon=True)
+        cap_thread.start()
+
+        # Aguarda primeiro frame
+        for _ in range(50):
+            with frame_lock:
+                if latest_frame[0] is not None:
+                    break
+            time.sleep(0.05)
 
         try:
             saved_count = 0
             frame_count = 0
+            fps = 0.0
+            fps_timer = time.time()
+            fps_frame_count = 0
+            last_viz = None
 
-            for frame in self.capture.capture_from_webcam(camera_index, realtime_mode):
-                frame_count += 1
+            while not stop_event.is_set():
+                # Pega o frame mais recente (não bloqueia)
+                with frame_lock:
+                    frame = latest_frame[0]
 
-                # Processa frames com frequência ajustada ao modo
-                skip_factor = 3 if realtime_mode else 1  # Alta precisão processa todos os frames
-                if frame_count % skip_factor != 0:
-                    cv2.imshow('Webcam - Original', frame)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
+                if frame is None:
+                    time.sleep(0.01)
                     continue
+
+                frame_count += 1
+                fps_frame_count += 1
+
+                # Calcula FPS a cada 10 frames
+                now = time.time()
+                elapsed = now - fps_timer
+                if elapsed >= 0.5:
+                    fps = fps_frame_count / elapsed
+                    fps_frame_count = 0
+                    fps_timer = now
 
                 # Detecta mato
                 mask, stats = self.detector.detect_grass_areas(frame, method)
 
-                # Analisa densidade para o painel detalhado
-                density_analysis = self.detector.analyze_grass_density(mask)
-
-                # Cria visualização baseada no modo selecionado
-                viz = self.visualizer.create_detailed_analysis_panel(frame, mask, stats,
-                                                                   density_analysis,
-                                                                   visualization_type=self.visualization_mode)
-
-                # Adiciona informações na tela
                 coverage = stats['coverage_percentage']
-                confidence = self.detector.get_detection_confidence(stats)
 
-                # Status detalhado
-                mode_text = ""
-                if self.detector.precision_params['enabled']:
-                    mode_text = " | ALTA PRECISÃO"
-                elif self.detector.realtime_params['enabled']:
-                    mode_text = " | TEMPO REAL"
+                # Visualização: leve em realtime, detalhada em precisão
+                if realtime_mode:
+                    viz = self._create_fast_overlay(frame, mask, stats, fps)
+                else:
+                    density_analysis = self.detector.analyze_grass_density(mask)
+                    viz = self.visualizer.create_detailed_analysis_panel(
+                        frame, mask, stats, density_analysis,
+                        visualization_type=self.visualization_mode)
 
-                status_text = f"Cobertura: {coverage:.1f}% | Confianca: {confidence:.3f}{mode_text}"
+                    confidence = self.detector.get_detection_confidence(stats)
+                    status_text = f"Cobertura: {coverage:.1f}% | Confianca: {confidence:.3f} | ALTA PRECISÃO"
+                    cv2.putText(viz, status_text, (10, viz.shape[0] - 20),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-                cv2.putText(viz, status_text, (10, viz.shape[0] - 20),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                last_viz = viz
 
                 # Exibe resultado
-                cv2.imshow('Detecção de Mato - Tempo Real', viz)
-
-                # Garante que a janela está em foco para capturar teclas
-                cv2.setWindowProperty('Detecção de Mato - Tempo Real', cv2.WND_PROP_TOPMOST, 1)
-                cv2.setWindowProperty('Detecção de Mato - Tempo Real', cv2.WND_PROP_TOPMOST, 0)
+                cv2.imshow(window_name, viz)
 
                 # Salva detecções interessantes automaticamente
                 if save_detections and coverage > min_coverage_to_save:
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-                    save_path = self.output_dir / f"webcam_detection_{timestamp}.jpg"
-                    self.visualizer.save_visualization(viz, str(save_path))
-                    saved_count += 1
-                    print(f"Detecção salva: {save_path}")
+                    # Limita salvamentos a no máximo 1 por segundo
+                    if not hasattr(self, '_last_save_time') or (now - self._last_save_time) > 1.0:
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+                        save_path = self.output_dir / f"webcam_detection_{timestamp}.jpg"
+                        self.visualizer.save_visualization(viz, str(save_path))
+                        saved_count += 1
+                        self._last_save_time = now
+                        print(f"Detecção salva: {save_path}")
 
-                # Controles de teclado - timeout maior para capturar melhor as teclas
-                key = cv2.waitKey(30) & 0xFF
+                # Controles de teclado — waitKey(1) para mínimo delay
+                key = cv2.waitKey(1) & 0xFF
                 if key == ord('q') or key == 27:  # 'q' ou ESC
                     print("👋 Saindo da captura...")
                     break
                 elif key == ord('s'):
-                    # Salva frame atual
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     save_path = self.output_dir / f"webcam_manual_{timestamp}.jpg"
-                    self.visualizer.save_visualization(viz, str(save_path))
+                    if last_viz is not None:
+                        self.visualizer.save_visualization(last_viz, str(save_path))
                     print(f"📸 Frame salvo: {save_path}")
                 elif key == ord('m'):
-                    # Troca modo em tempo real
                     if self.detector.realtime_params['enabled']:
                         self.detector.set_precision_mode(True)
+                        realtime_mode = False
                         print("🎯 Alternado para modo alta precisão")
                     else:
                         self.detector.set_realtime_mode(True)
+                        realtime_mode = True
                         print("🚀 Alternado para modo tempo real")
                 elif key == ord('v'):
-                    # Troca modo visual
                     if self.visualization_mode == 'bounding_box':
                         self.visualization_mode = 'overlay'
                         print("🎨 Alternado para Overlay Clássico")
@@ -394,22 +814,22 @@ class GrassDetectionSystem:
                         self.visualization_mode = 'bounding_box'
                         print("🎨 Alternado para Dashboard Moderno")
                 elif key == ord('h'):
-                    # Mostra ajuda
                     print("\n🎮 CONTROLES DISPONÍVEIS:")
                     print("  Q ou ESC = Sair")
                     print("  S = Salvar frame atual")
                     print("  V = Alternar modo visual")
                     print("  M = Alternar modo precisão")
                     print("  H = Mostrar esta ajuda")
-                elif key != 255:  # Alguma tecla foi pressionada (255 = nenhuma tecla)
-                    print(f"⌨️  Tecla '{chr(key) if 32 <= key <= 126 else key}' pressionada - Use 'H' para ajuda")
 
-            print(f"\n✅ Captura finalizada. {saved_count} imagens salvas.")
+            print(f"\n✅ Captura finalizada. {saved_count} imagens salvas. FPS médio: {fps:.1f}")
 
         except Exception as e:
             logger.error(f"Erro na captura em tempo real: {str(e)}")
             print(f"❌ Erro durante a captura: {str(e)}")
         finally:
+            stop_event.set()
+            cap_thread.join(timeout=2)
+            cap.release()
             cv2.destroyAllWindows()
 
     def batch_analysis(self) -> None:
@@ -899,6 +1319,8 @@ class GrassDetectionSystem:
                     self.analyze_potholes_batch()
                 elif choice == '11':
                     self.compare_pothole_methods()
+                elif choice == '12':
+                    self.process_video_with_overlay()
                 elif choice == '0':
                     print("👋 Obrigado por usar o sistema!")
                     break
@@ -918,11 +1340,20 @@ def main():
     """Função principal."""
     parser = argparse.ArgumentParser(description="Sistema de Detecção de Mato Alto")
     parser.add_argument('--image', type=str, help='Caminho da imagem para análise direta')
+    parser.add_argument('--video', type=str, help='Caminho do vídeo para processar com overlay')
     parser.add_argument('--method', type=str, default='combined',
                        choices=['color', 'texture', 'combined', 'deeplearning'],
                        help='Método de detecção')
     parser.add_argument('--output', type=str, help='Diretório de saída personalizado')
     parser.add_argument('--batch', type=str, help='Pasta para análise em lote')
+    parser.add_argument('--visual-mode', type=str, default='1',
+                       choices=['1', '2', '3'],
+                       help='Modo visual do overlay: 1=leve, 2=clássico, 3=dashboard')
+    parser.add_argument('--quality', type=str, default='1',
+                       choices=['1', '2'],
+                       help='Qualidade de processamento: 1=rápido, 2=alta precisão')
+    parser.add_argument('--preview', action='store_true',
+                       help='Mostrar preview durante processamento de vídeo')
 
     args = parser.parse_args()
 
@@ -954,6 +1385,170 @@ def main():
             print(f"Cobertura: {stats['coverage_percentage']:.2f}%")
         else:
             print("Erro ao carregar imagem")
+
+    elif args.video:
+        # Processamento de vídeo com overlay via CLI
+        video_path = args.video
+        if not Path(video_path).exists():
+            print(f"❌ Arquivo não encontrado: {video_path}")
+            return
+
+        video_ext = Path(video_path).suffix.lower()
+        if video_ext not in ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv']:
+            print(f"❌ Formato de vídeo não suportado: {video_ext}")
+            return
+
+        method = args.method
+        visual_mode = args.visual_mode
+        quality_mode = args.quality
+        show_preview = args.preview
+
+        if quality_mode == "2":
+            system.detector.set_precision_mode(True)
+            realtime_mode = False
+            print("🎯 Modo alta precisão selecionado")
+        else:
+            system.detector.set_realtime_mode(True)
+            realtime_mode = True
+            print("🚀 Modo rápido selecionado")
+
+        # Abre o vídeo de entrada
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print("❌ Erro ao abrir o vídeo")
+            return
+
+        # Obtém propriedades do vídeo
+        input_fps = cap.get(cv2.CAP_PROP_FPS)
+        input_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        input_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = total_frames / input_fps if input_fps > 0 else 0
+
+        print(f"\n📊 INFORMAÇÕES DO VÍDEO:")
+        print(f"   Resolução: {input_width}x{input_height}")
+        print(f"   FPS: {input_fps:.2f}")
+        print(f"   Total de frames: {total_frames}")
+        print(f"   Duração: {duration:.1f}s ({duration/60:.1f}min)")
+
+        # Define caminho de saída
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        video_name = Path(video_path).stem
+        output_filename = f"{video_name}_overlay_{method}_{timestamp}.mp4"
+        output_path = system.output_dir / output_filename
+
+        # Determina o tamanho do frame de saída baseado no modo visual
+        if visual_mode == "3":
+            panel_width = int(input_width * 0.3)
+            output_width = input_width + panel_width
+            output_height = input_height
+        else:
+            output_width = input_width
+            output_height = input_height
+
+        # Configura o writer de vídeo de saída
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out_writer = cv2.VideoWriter(str(output_path), fourcc, input_fps, (output_width, output_height))
+
+        if not out_writer.isOpened():
+            print("❌ Erro ao criar arquivo de vídeo de saída")
+            cap.release()
+            return
+
+        print(f"\n🔄 Processando vídeo... Saída: {output_path}")
+        print(f"   Resolução de saída: {output_width}x{output_height}")
+
+        if show_preview:
+            window_name = 'Preview - Processamento de Vídeo'
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(window_name, min(output_width, 1280), min(output_height, 720))
+
+        frame_count = 0
+        total_coverage = 0.0
+        max_coverage = 0.0
+        min_coverage = 100.0
+        fps_timer = time.time()
+        fps_frame_count = 0
+        processing_fps = 0.0
+
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                frame_count += 1
+                fps_frame_count += 1
+
+                now = time.time()
+                elapsed = now - fps_timer
+                if elapsed >= 1.0:
+                    processing_fps = fps_frame_count / elapsed
+                    fps_frame_count = 0
+                    fps_timer = now
+
+                mask, stats = system.detector.detect_grass_areas(frame, method)
+                coverage = stats.get('coverage_percentage', 0)
+                total_coverage += coverage
+                max_coverage = max(max_coverage, coverage)
+                min_coverage = min(min_coverage, coverage)
+
+                if visual_mode == "2":
+                    viz = system.visualizer.create_overlay_visualization(frame, mask, stats)
+                elif visual_mode == "3":
+                    density_analysis = system.detector.analyze_grass_density(mask)
+                    viz = system.visualizer.create_detailed_analysis_panel(
+                        frame, mask, stats, density_analysis,
+                        visualization_type='bounding_box')
+                else:
+                    # Overlay leve estilo webcam (padrão / modo "1")
+                    viz = system._create_video_overlay(frame, mask, stats, processing_fps,
+                                                       frame_count, total_frames)
+
+                viz_h, viz_w = viz.shape[:2]
+                if viz_w != output_width or viz_h != output_height:
+                    viz = cv2.resize(viz, (output_width, output_height))
+
+                out_writer.write(viz)
+
+                progress = (frame_count / total_frames * 100) if total_frames > 0 else 0
+                eta_seconds = ((total_frames - frame_count) / processing_fps) if processing_fps > 0 else 0
+                eta_min = int(eta_seconds // 60)
+                eta_sec = int(eta_seconds % 60)
+                print(f"   Frame {frame_count}/{total_frames} ({progress:.1f}%) | "
+                      f"Cobertura: {coverage:.1f}% | "
+                      f"FPS: {processing_fps:.1f} | "
+                      f"ETA: {eta_min}m{eta_sec:02d}s", end='\r')
+
+                if show_preview:
+                    cv2.imshow(window_name, viz)
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord('q') or key == 27:
+                        print("\n\n⚠️  Processamento cancelado pelo usuário")
+                        break
+
+            avg_coverage = total_coverage / frame_count if frame_count > 0 else 0
+
+            print(f"\n\n✅ PROCESSAMENTO CONCLUÍDO!")
+            print(f"="*60)
+            print(f"   📁 Vídeo de saída: {output_path}")
+            print(f"   🎞️  Frames processados: {frame_count}/{total_frames}")
+            print(f"   📊 Cobertura média: {avg_coverage:.2f}%")
+            print(f"   📈 Cobertura máxima: {max_coverage:.2f}%")
+            print(f"   📉 Cobertura mínima: {min_coverage:.2f}%")
+            print(f"   ⚡ FPS de processamento: {processing_fps:.1f}")
+            print(f"="*60)
+
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Processamento interrompido pelo usuário")
+        except Exception as e:
+            logger.error(f"Erro no processamento do vídeo: {str(e)}")
+            print(f"\n❌ Erro durante o processamento: {str(e)}")
+        finally:
+            cap.release()
+            out_writer.release()
+            if show_preview:
+                cv2.destroyAllWindows()
 
     elif args.batch:
         print(f"Análise em lote: {args.batch}")

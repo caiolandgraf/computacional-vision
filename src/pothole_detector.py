@@ -3,14 +3,35 @@ Detector de buracos (potholes) usando visão computacional.
 Utiliza múltiplas técnicas: análise de contornos, textura, profundidade e CNN.
 """
 
+import logging
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
 import cv2
 import numpy as np
-from pathlib import Path
-from typing import Tuple, List, Dict, Optional
-import logging
 from scipy import ndimage
-from skimage.feature import local_binary_pattern
-from skimage.morphology import disk
+
+# Lazy imports do skimage (lento no Python 3.14, ~20s no startup)
+_skimage_feature = None
+_skimage_morphology = None
+
+
+def _get_local_binary_pattern():
+    """Importa skimage.feature.local_binary_pattern sob demanda."""
+    global _skimage_feature
+    if _skimage_feature is None:
+        from skimage.feature import local_binary_pattern as _lbp
+        _skimage_feature = _lbp
+    return _skimage_feature
+
+
+def _get_disk():
+    """Importa skimage.morphology.disk sob demanda."""
+    global _skimage_morphology
+    if _skimage_morphology is None:
+        from skimage.morphology import disk as _disk
+        _skimage_morphology = _disk
+    return _skimage_morphology
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -272,7 +293,7 @@ class PotholeDetector:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
         # 1. Local Binary Pattern (LBP)
-        lbp = local_binary_pattern(
+        lbp = _get_local_binary_pattern()(
             gray,
             self.texture_params['lbp_points'],
             self.texture_params['lbp_radius'],
