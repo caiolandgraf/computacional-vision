@@ -1,0 +1,9 @@
+version: '3.9'
+
+services:
+  vision-app:
+    build: .
+    container_name: vision-app
+    ports:
+      - '8000:8000'
+    restart: always

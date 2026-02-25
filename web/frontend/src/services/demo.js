@@ -124,7 +124,16 @@ function demoResultFilename(prefix = 'demo', ext = 'jpg') {
 
 function generateDemoResults(count = 8) {
   const results = []
-  const types = ['image', 'image', 'image', 'image', 'video', 'image', 'image', 'video']
+  const types = [
+    'image',
+    'image',
+    'image',
+    'image',
+    'video',
+    'image',
+    'image',
+    'video'
+  ]
   const methods = ['color', 'texture', 'combined', 'combined']
   const now = Date.now()
 
@@ -136,7 +145,10 @@ function generateDemoResults(count = 8) {
     results.push({
       filename: `${type === 'video' ? 'video' : 'analysis'}_${method}_${created.getTime()}.${type === 'video' ? 'mp4' : 'jpg'}`,
       type,
-      size_kb: type === 'video' ? randomBetween(2000, 15000, 0) : randomBetween(50, 500, 0),
+      size_kb:
+        type === 'video'
+          ? randomBetween(2000, 15000, 0)
+          : randomBetween(50, 500, 0),
       created_at: created.toISOString(),
       method,
       coverage: randomBetween(10, 80),
@@ -301,7 +313,10 @@ export const demoApi = {
     }
   },
 
-  async analyzeImage(_file, { method = 'combined', visualMode = 'overlay' } = {}) {
+  async analyzeImage(
+    _file,
+    { method = 'combined', visualMode = 'overlay' } = {}
+  ) {
     await delay(800)
     const stats = generateDemoStats(method)
     const density = generateDemoDensity()
@@ -319,8 +334,18 @@ export const demoApi = {
       },
       density,
       images: {
-        overlay: generateDemoSvgImage(640, 480, `Overlay — ${method}`, coverage),
-        detailed: generateDemoSvgImage(640, 480, `Detalhado — ${visualMode}`, coverage)
+        overlay: generateDemoSvgImage(
+          640,
+          480,
+          `Overlay — ${method}`,
+          coverage
+        ),
+        detailed: generateDemoSvgImage(
+          640,
+          480,
+          `Detalhado — ${visualMode}`,
+          coverage
+        )
       },
       files: {
         overlay: '#',
@@ -354,7 +379,8 @@ export const demoApi = {
         total_area: potholes.reduce((s, p) => s + p.area, 0),
         coverage,
         confidence: randomBetween(0.6, 0.95, 2),
-        confidence_level: coverage > 15 ? 'Alta' : coverage > 8 ? 'Média' : 'Baixa'
+        confidence_level:
+          coverage > 15 ? 'Alta' : coverage > 8 ? 'Média' : 'Baixa'
       },
       potholes,
       flags: numPotholes > 5 ? ['high_pothole_density'] : [],
@@ -405,7 +431,10 @@ export const demoApi = {
     }
   },
 
-  async analyzeBatch(files, { method = 'combined', detectionType = 'grass' } = {}) {
+  async analyzeBatch(
+    files,
+    { method = 'combined', detectionType = 'grass' } = {}
+  ) {
     await delay(1500)
     const results = Array.from({ length: files.length }, (_, i) => {
       const file = files[i]
@@ -416,7 +445,12 @@ export const demoApi = {
         confidence: randomBetween(0.6, 0.98, 4),
         density: coverage > 50 ? 'Alta' : coverage > 25 ? 'Média' : 'Baixa',
         regions: Math.floor(Math.random() * 15) + 1,
-        image: generateDemoSvgImage(640, 480, file.name || `Batch ${i + 1}`, coverage),
+        image: generateDemoSvgImage(
+          640,
+          480,
+          file.name || `Batch ${i + 1}`,
+          coverage
+        ),
         file: '#'
       }
     })
@@ -429,7 +463,9 @@ export const demoApi = {
       summary: {
         total: files.length,
         processed: files.length,
-        avg_coverage: Number((coverages.reduce((a, b) => a + b, 0) / coverages.length).toFixed(2)),
+        avg_coverage: Number(
+          (coverages.reduce((a, b) => a + b, 0) / coverages.length).toFixed(2)
+        ),
         max_coverage: Math.max(...coverages),
         min_coverage: Math.min(...coverages)
       },
