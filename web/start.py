@@ -283,12 +283,14 @@ def start_api_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = Fal
     logger.info(dim(f"  Pressione Ctrl+C para parar"))
     logger.info("")
 
+    import subprocess
+
     subprocess.run([
-        "gunicorn",
-        "-w", "4",
-        "-k", "uvicorn.workers.UvicornWorker",
+        sys.executable, "-m", "uvicorn",
         "api:app",
-        "--bind", f"{host}:{port}",
+        "--host", host,
+        "--port", str(port),
+        "--workers", "4",  # ou 8 dependendo da VPS
     ])
 
 def start_dev_mode(host: str = "0.0.0.0", port: int = 8000):
