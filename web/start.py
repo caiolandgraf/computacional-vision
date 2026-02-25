@@ -291,6 +291,7 @@ def start_api_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = Fal
         app_dir=str(SCRIPT_DIR),
         log_level="info",
         access_log=True,
+        workers=8,  # 👈 AQUI
     )
 
 
