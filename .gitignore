@@ -34,8 +34,14 @@ Thumbs.db
 output/
 test_output/
 uploads/
+models/
+knowledge_base.json
+web/knowledge_base.json
 training_data/videos/
 training_data/processed_frames/unknown/
+training_data/validation_results/
+training_data/copy_stats.json
+training_data/training_stats.json
 
 # ── Env / Secrets ────────────────────────────────────────────
 .env
