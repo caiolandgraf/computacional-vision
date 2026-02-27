@@ -44,6 +44,12 @@ const routes = [
     meta: { title: 'Comparar Métodos', icon: '🔬' }
   },
   {
+    path: '/people',
+    name: 'PeopleDetection',
+    component: () => import('./views/PeopleDetectionView.vue'),
+    meta: { title: 'Detecção de Pessoas', icon: '🧑‍🤝‍🧑' }
+  },
+  {
     path: '/results',
     name: 'Results',
     component: () => import('./views/ResultsView.vue'),

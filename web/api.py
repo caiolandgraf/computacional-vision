@@ -47,6 +47,7 @@ sys.path.insert(0, str(SRC_DIR))
 
 from capture import ImageCapture
 from detector import GrassDetector
+from people_detector import PeopleDetector
 from pothole_detector import PotholeDetector
 from visualizer import ResultVisualizer
 
@@ -70,9 +71,11 @@ capture = ImageCapture()
 detector = GrassDetector()
 pothole_detector = PotholeDetector()
 visualizer = ResultVisualizer()
+people_detector_inst = PeopleDetector()
 
 # ── Rastreamento de jobs assíncronos (processamento de vídeo) ─
 video_jobs: Dict[str, Dict[str, Any]] = {}
+people_video_jobs: Dict[str, Dict[str, Any]] = {}
 
 # ── FastAPI App ──────────────────────────────────────────────
 app = FastAPI(
@@ -985,6 +988,352 @@ async def download_file(filename: str):
         filename=filename,
         media_type="application/octet-stream",
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Detecção de Pessoas
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/people/analyze")
+async def analyze_people_image(
+    file: UploadFile = File(...),
+    blur_faces: bool = Form(False),
+):
+    """
+    Detecta e conta pessoas em uma imagem.
+    Parâmetros:
+      - file       : imagem (JPEG, PNG, etc.)
+      - blur_faces : se true, aplica desfoque nos rostos detectados
+    """
+    contents = await file.read()
+    try:
+        frame = _read_upload(contents)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    people_detector_inst.set_precision_mode()
+
+    processed, result = people_detector_inst.detect(
+        frame, blur_faces=blur_faces, draw_overlay=True
+    )
+
+    result_b64 = _image_to_base64(processed)
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ext = Path(file.filename or "image.jpg").suffix or ".jpg"
+    out_name = f"people_{ts}{ext}"
+    out_path = OUTPUT_DIR / out_name
+    cv2.imwrite(str(out_path), processed)
+
+    return {
+        "success": True,
+        "image": result_b64,
+        "output_file": out_name,
+        "output_url": f"/files/output/{out_name}",
+        "stats": PeopleDetector.result_to_dict(result),
+    }
+
+
+def _process_people_video_worker(job_id: str, video_path: str, blur_faces: bool):
+    """Função que roda em thread separada para processar vídeo de pessoas."""
+    job = people_video_jobs[job_id]
+
+    try:
+        people_detector_inst.set_precision_mode()
+
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            job["status"] = "error"
+            job["error"] = "Não foi possível abrir o vídeo"
+            return
+
+        fps_in  = cap.get(cv2.CAP_PROP_FPS) or 30
+        w_in    = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h_in    = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total   = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        job["total_frames"] = total
+        job["fps"]          = fps_in
+        job["resolution"]   = f"{w_in}x{h_in}"
+        job["duration"]     = round(total / fps_in, 1) if fps_in > 0 else 0
+
+        ts        = datetime.now().strftime("%Y%m%d_%H%M%S")
+        vname     = Path(video_path).stem
+        blur_tag  = "_blur" if blur_faces else ""
+        out_filename = f"people_{vname}{blur_tag}_{ts}.mp4"
+        out_path  = OUTPUT_DIR / out_filename
+
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(str(out_path), fourcc, fps_in, (w_in, h_in))
+
+        job["output_file"] = out_filename
+        job["status"]      = "processing"
+
+        frame_count   = 0
+        total_people  = 0
+        max_people    = 0
+        t_start       = time.time()
+        _fps_counter  = 0
+        _fps_timer    = time.time()
+        _proc_fps     = 0.0
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            frame_count  += 1
+            _fps_counter += 1
+
+            now_t = time.time()
+            if now_t - _fps_timer >= 1.0:
+                _proc_fps    = _fps_counter / (now_t - _fps_timer)
+                _fps_counter = 0
+                _fps_timer   = now_t
+
+            processed, result = people_detector_inst.detect(
+                frame,
+                blur_faces=blur_faces,
+                draw_overlay=True,
+                fps=_proc_fps if _proc_fps > 0 else None,
+            )
+
+            count         = result.person_count
+            total_people += count
+            max_people    = max(max_people, count)
+
+            vh, vw = processed.shape[:2]
+            if vw != w_in or vh != h_in:
+                processed = cv2.resize(processed, (w_in, h_in))
+
+            writer.write(processed)
+
+            if frame_count % 5 == 0 or frame_count == total:
+                elapsed      = time.time() - t_start
+                proc_fps_avg = frame_count / elapsed if elapsed > 0 else 0
+                progress     = (frame_count / total * 100) if total > 0 else 0
+                eta          = ((total - frame_count) / proc_fps_avg) if proc_fps_avg > 0 else 0
+                job.update({
+                    "current_frame":  frame_count,
+                    "progress":       round(progress, 1),
+                    "current_people": count,
+                    "processing_fps": round(proc_fps_avg, 1),
+                    "eta_seconds":    round(eta, 1),
+                })
+
+        cap.release()
+        writer.release()
+
+        elapsed_total  = time.time() - t_start
+        proc_fps_final = frame_count / elapsed_total if elapsed_total > 0 else 0
+        avg_people     = total_people / frame_count if frame_count > 0 else 0
+
+        job.update({
+            "status":         "completed",
+            "current_frame":  frame_count,
+            "progress":       100.0,
+            "avg_people":     round(avg_people, 2),
+            "max_people":     max_people,
+            "processing_fps": round(proc_fps_final, 1),
+            "output_url":     f"/files/output/{out_filename}",
+            "completed_at":   datetime.now().isoformat(),
+        })
+
+    except Exception as exc:
+        logger.error(f"Erro processando vídeo people job {job_id}: {exc}", exc_info=True)
+        job["status"] = "error"
+        job["error"]  = str(exc)
+
+
+@app.post("/api/people/video/process")
+async def process_people_video(
+    file: UploadFile = File(...),
+    blur_faces: bool = Form(False),
+):
+    """
+    Inicia processamento assíncrono de vídeo para detecção de pessoas.
+    Retorna job_id para acompanhar via polling.
+    """
+    contents    = await file.read()
+    upload_path = _save_upload(contents, file.filename or "video.mp4")
+
+    job_id = uuid.uuid4().hex[:12]
+    people_video_jobs[job_id] = {
+        "id":             job_id,
+        "status":         "queued",
+        "filename":       file.filename,
+        "blur_faces":     blur_faces,
+        "created_at":     datetime.now().isoformat(),
+        "current_frame":  0,
+        "total_frames":   0,
+        "progress":       0.0,
+        "current_people": 0,
+        "avg_people":     0,
+        "max_people":     0,
+    }
+
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(
+        None, _process_people_video_worker, job_id, str(upload_path), blur_faces
+    )
+
+    return {"success": True, "job_id": job_id, "status": "queued"}
+
+
+@app.get("/api/people/video/status/{job_id}")
+async def people_video_status(job_id: str):
+    """Retorna o status atual de um job de detecção de pessoas em vídeo."""
+    if job_id not in people_video_jobs:
+        raise HTTPException(404, "Job não encontrado")
+    return people_video_jobs[job_id]
+
+
+@app.get("/api/people/video/jobs")
+async def list_people_video_jobs():
+    """Lista todos os jobs de detecção de pessoas em vídeo."""
+    return {"jobs": list(people_video_jobs.values())}
+
+
+@app.websocket("/api/ws/people-webcam")
+async def websocket_people_webcam(ws: WebSocket):
+    """
+    WebSocket para detecção de pessoas em tempo real via webcam.
+
+    Configurações dinâmicas (via mensagem type=config):
+      - blur_faces : bool — se true, desfoca os rostos
+      - quality    : "1" (tempo real) | "2" (alta precisão)
+
+    Otimizações de FPS:
+      - Detecção executada via run_in_executor (não bloqueia o event loop)
+      - Frames recebidos enquanto a GPU/CPU está ocupada são descartados
+        (skip-if-busy), evitando fila crescente e latência acumulada
+      - FPS calculado como round-trip real (frames enviados de volta / seg)
+    """
+    await ws.accept()
+    logger.info("WebSocket people-webcam conectado")
+
+    blur_faces  = False
+    quality     = "1"
+    _processing = False          # flag skip-if-busy
+
+    # FPS de envio (frames recebidos do cliente)
+    _recv_count   = 0
+    _recv_fps     = 0.0
+    _recv_timer   = time.time()
+
+    # FPS de resultado (frames processados e enviados de volta)
+    _result_count = 0
+    _result_fps   = 0.0
+    _result_timer = time.time()
+
+    loop = asyncio.get_running_loop()
+
+    try:
+        while True:
+            data = await ws.receive_text()
+            msg  = json.loads(data)
+
+            # ── Configuração dinâmica ────────────────────────
+            if msg.get("type") == "config":
+                blur_faces = bool(msg.get("blur_faces", blur_faces))
+                quality    = msg.get("quality", quality)
+
+                if quality == "2":
+                    people_detector_inst.set_precision_mode()
+                else:
+                    people_detector_inst.set_realtime_mode()
+
+                logger.info(
+                    f"WS people config: blur_faces={blur_faces}, quality={quality}"
+                )
+                await ws.send_json({
+                    "type":       "config_ack",
+                    "blur_faces": blur_faces,
+                    "quality":    quality,
+                })
+                continue
+
+            # ── Frame de imagem em base64 ────────────────────
+            if msg.get("type") != "frame":
+                continue
+
+            frame_b64 = msg.get("data", "")
+            if not frame_b64:
+                continue
+
+            # Atualiza FPS de recebimento
+            _recv_count += 1
+            now_t = time.time()
+            if now_t - _recv_timer >= 1.0:
+                _recv_fps    = _recv_count / (now_t - _recv_timer)
+                _recv_count  = 0
+                _recv_timer  = now_t
+
+            # Skip-if-busy: descarta frame se a inferência anterior ainda não terminou
+            if _processing:
+                continue
+
+            # Decodifica fora do executor (rápido, não vale spawnar thread)
+            img_bytes = base64.b64decode(frame_b64)
+            nparr     = np.frombuffer(img_bytes, np.uint8)
+            frame     = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if frame is None:
+                continue
+
+            # Captura valores locais para a closure (evita race condition)
+            _blur   = blur_faces
+            _fps_in = _recv_fps if _recv_fps > 0 else None
+            _frame  = frame     # já é uma cópia do decode
+
+            _processing = True
+            t0 = time.time()
+
+            try:
+                # Roda a inferência (CPU-bound) em thread pool → não bloqueia o loop
+                processed, result = await loop.run_in_executor(
+                    None,
+                    lambda: people_detector_inst.detect(
+                        _frame,
+                        blur_faces=_blur,
+                        draw_overlay=True,
+                        fps=_fps_in,
+                    ),
+                )
+            finally:
+                _processing = False
+
+            proc_time = time.time() - t0
+
+            # Atualiza FPS de resultado
+            _result_count += 1
+            now_t = time.time()
+            if now_t - _result_timer >= 1.0:
+                _result_fps   = _result_count / (now_t - _result_timer)
+                _result_count = 0
+                _result_timer = now_t
+
+            result_b64 = _image_to_base64(processed)
+
+            await ws.send_json({
+                "type":  "result",
+                "image": result_b64,
+                "stats": {
+                    "person_count":       result.person_count,
+                    "face_count":         result.face_count,
+                    "body_count":         result.body_count,
+                    "blur_applied":       result.blur_applied,
+                    "processing_time_ms": round(proc_time * 1000, 1),
+                    "fps":                round(_result_fps, 1),
+                    "recv_fps":           round(_recv_fps, 1),
+                    "quality":            quality,
+                    "method":             result.method,
+                },
+            })
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket people-webcam desconectado")
+    except Exception as exc:
+        logger.error(f"Erro WebSocket people-webcam: {exc}", exc_info=True)
 
 
 # ═══════════════════════════════════════════════════════════════
